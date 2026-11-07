@@ -260,7 +260,7 @@ body.capture #hud{visibility:hidden}
 .star.special{border-color:rgba(233,196,106,.5)}
 .star .tag{font-size:11px;color:#E9C46A;font-weight:600}
 .star p{font-size:12px;color:var(--dim);margin:0;line-height:1.45}
-#bossBar{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:min(520px,50vw);padding:8px 12px;text-align:center}
+#bossBar{position:absolute;top:56px;left:50%;transform:translateX(-50%);width:min(520px,50vw);padding:8px 12px;text-align:center}
 #bossBar[hidden]{display:none}
 #bossBar .bn{font-size:13px;font-weight:600;display:flex;justify-content:space-between}
 #bossBar .bn span{color:var(--dim);font-weight:500}
@@ -286,6 +286,12 @@ body.capture #hud{visibility:hidden}
 .ar-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .ar-grid3.mod2{margin:6px 0 0 18px;padding-left:10px;border-left:2px solid rgba(255,190,90,.45)}
 .ar small.cd{color:var(--dim)}
+#speedBar{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:4px;padding:4px;pointer-events:auto}
+#speedBar button{min-width:46px;padding:5px 8px;font-size:12px;border:1px solid var(--line);border-radius:4px;background:transparent;color:var(--dim);cursor:pointer}
+#speedBar button:hover{color:var(--star)}
+#speedBar button.on{color:#E9C46A;border-color:#E9C46A;background:rgba(233,196,106,.1)}
+#traitOv .sheet{max-height:92vh;overflow:auto}
+#diffOv .ar-grid{margin:14px 0}
 @media (max-width:820px){.ar-grid3{grid-template-columns:1fr}}
 </style>
 <script type="importmap">
@@ -339,6 +345,7 @@ body.capture #hud{visibility:hidden}
     <div id="offerBar" class="panel" hidden></div>
   </div>
   <div id="supers" aria-label="슈퍼 웨폰"></div>
+  <div id="speedBar" class="panel" role="group" aria-label="게임 속도"></div>
   <div id="bossBar" class="panel" hidden><div class="bn"><b id="bossName">마더쉽</b><span id="bossTxt"></span></div><div class="bar"><i id="bossHp"></i></div></div>
   <div id="banner" aria-live="polite"><b id="bannerT"></b><span id="bannerS"></span></div>
 </div>
@@ -363,6 +370,22 @@ body.capture #hud{visibility:hidden}
 적을 격파하면 포인트가 쌓입니다.
 포인트로 무기 업그레이드하고 FTL 게이지가 쌓일 때까지 버티십시오.</p>
     <div class="best" id="best"></div>
+  </div>
+</div>
+<div id="traitOv" class="overlay" hidden>
+  <div class="sheet panel armory" role="dialog" aria-labelledby="traitT">
+    <h2 id="traitT">특성 선택</h2>
+    <div class="detail-meta" id="traitMeta"></div>
+    <div id="traitBody"></div>
+    <div class="col" style="margin-top:16px"><button class="cta" id="traitGo">다음</button><button class="ghost" id="traitBack">뒤로</button></div>
+  </div>
+</div>
+<div id="diffOv" class="overlay" hidden>
+  <div class="sheet panel" role="dialog" aria-labelledby="diffT" style="max-width:520px">
+    <h2 id="diffT">난이도</h2>
+    <p class="detail-meta">적 내구도가 오르는 폭과, 스웜 규모를 키우는 누적 격파 수의 반영 속도를 정합니다.</p>
+    <div class="ar-grid"><button class="ar" data-diff="normal"><b>보통</b><p>기본 난이도</p></button><button class="ar" data-diff="easy"><b>쉬움</b><p>적 내구도 상승과 스웜 규모 증가가 보통보다 2배 느림</p></button></div>
+    <div class="col"><button class="ghost" id="diffBack">뒤로</button></div>
   </div>
 </div>
 <div id="pauseOv" class="overlay" hidden>
@@ -558,11 +581,12 @@ const SWARM_BASE = 2.6, SWARM_GROW = 3.4;
 // 스폰량: 무리 크기는 기존의 절반(SPAWN_SCALE)에서 시작하고, 무리 크기와 워프 간격은 누적 격파 수에 따라 점점 커지고 짧아짐
 // spawnProg = 누적 격파 수 × KILL_PROGRESS (격파 10기마다 1). 도약해도 줄지 않음
 const SPAWN_SCALE = 0.5, KILL_PROGRESS = 0.1;
-const spawnProg = () => (S.spawnKills ?? S.kills) * KILL_PROGRESS;   // 분쟁 지역 격파는 빼고 셈 (S.spawnKills), 예전 저장은 누적 격파로
+const ease = () => S.diff === 'easy' ? 0.5 : 1;   // 난이도 쉬움: 내구도 상승폭과 스폰 진행도를 절반으로
+const spawnProg = () => (S.spawnKills ?? S.kills) * KILL_PROGRESS * ease();   // 분쟁 지역 격파는 빼고 셈 (S.spawnKills), 예전 저장은 누적 격파로
 const SWARM_MUL = 1.3; // 한 번에 워프해 오는 스웜 수 배율 (무리당 최대: 일반 450, 분쟁 지역 1,800)
 // 새 항성에 도착하면 적 내구도와 스폰 주기는 처음 값으로 돌아가고, 그 항성 안에서 시간이 갈수록 다시 올라감
 const SECTOR_HP = 0.15;   // 무한모드: 항성계를 하나 지날 때마다 기본 내구도 +15% (도약해도 줄지 않음)
-const hpMul = () => (1 + SECTOR_HP * (S.sector - 1)) * (1 + S.local / 240);   // 그 위에 체류 시간: 10분에 ×3.5
+const hpMul = () => (1 + SECTOR_HP * (S.sector - 1) * ease()) * (1 + S.local / 240 * ease()) * (S.foeHp || 1);   // 그 위에 체류 시간: 10분에 ×3.5
 const killValue = () => 0.5 + 0.5 * hpMul();
 const ftlNeed = () => system.ftl;
 const ftlLabel = v => `${Math.round(v).toLocaleString('ko-KR')}기`;
@@ -1515,7 +1539,7 @@ const MODS2 = {
 for (const id in MODS2) MODS2[id] = MODS2[id].map(row => row.map(mkMod));
 const SUPERS = {
   bombard: { name: '지원 포격', cost: 1, desc: '주변 반경 45에 거대한 폭발', use: superBombard },
-  stasis:   { name: '정지장', cost: 1, desc: '반경 80 안의 모든 적을 6초간 멈춤', use: superStasis },
+  pdef:     { name: '행성 방어 포대', cost: 10, desc: '가장 가까운 행성에 최대 레벨 유도 미사일 포대 5문을 설치\n체력 10,000, 스웜에게 공격받아 0이 되면 폭발', use: superPdef },
   hole:     { name: '블랙홀 폭탄', cost: 4, aim: true, desc: '원하는 지점에 블랙홀 폭탄을 발사\n8초간 블랙홀 생성', use: superHole },
   over:     { name: '과부하 프로토콜', cost: 1, desc: '10초간 모든 무기 발사 간격 60% 단축, 피해 50% 증가', use: superOver },
   allies:   { name: '동맹 호출', cost: 3, desc: '동맹 5척을 호출합니다.', use: superAllies },
@@ -1548,6 +1572,22 @@ function droneHtml() {
       return `<button class="ar${on ? ' own' : ''}" data-drone="${k}" data-w="${id}" ${on || S.sp >= DRONE_SWAP_COST ? '' : 'disabled'}><b>${WEAPONS[id].name}</b><p>${DRONE_DESC[id]}</p><small>${on ? '장착 중' : `${DRONE_SWAP_COST} 포인트, 교체`}</small></button>`; }).join('');
     return `<div class="modrow"><div class="modname">${k + 1}번 드론, 장착: <b>${WEAPONS[w].name}</b></div><div class="ar-grid ar-grid4">${btns}</div></div>`;
   }).join('');
+}
+// 위성 포대: 산 순간의 탐사선 자리에 고정. 체력 없음, 적이 노리지 않음, 탐사선의 개틀링 건(강화·개조 그대로). 항성계를 떠나면 사라짐
+const TURRET_COST = 1;
+let turrets = [];
+function turretHtml() {
+  return `<div class="modrow"><div class="modname">위성 포대, 이 항성계에 <b>${turrets.length}</b>기 설치됨</div><div class="ar-grid"><button class="ar" data-buy-turret ${S.sp < TURRET_COST ? 'disabled' : ''}><b>위성 포대 설치</b><p>지금 탐사선 자리에 포대를 설치합니다. 탐사선의 개틀링 건(강화·개조 그대로)으로 공격하며, 체력이 없고 적이 노리지 않습니다.\n시간 제한은 없고, 이 항성계를 떠나면 사라집니다.</p><small>${TURRET_COST} 포인트</small></button></div></div>`;
+}
+function updateTurrets(dt, R, cdm) {
+  const s = wstAny('gatling'), mc = modOf('gatling'), col = c2('gatling') || (mc ? mc.col : [2.6, 2.0, 0.9]), H = h2('gatling');
+  for (const T of turrets) {
+    T.t -= dt; let g = 0;
+    while (T.t <= 0 && g++ < 6) {
+      const j = nearest(T.x, T.y, T.z, s.range * R); if (j < 0) { T.t = 0.1; break; }
+      T.t += s.int * cdm; const B = fireBullet(T.x, T.y, T.z, j, s.dmg, 0.5, col, modIs('gatling') ? 1.8 : 0); if (B) B.on = H.hit; sfx('gatling', 0.08, 0.03, 1.1);
+    }
+  }
 }
 const FUEL_UP = 0.1, FUEL_UP_MAX = 5, fuelUpCost = () => 1 + (S.fuelUp || 0);   // 연료 효율: 1회당 소모 10% 감소, 최대 5회(50%), 1~5 포인트
 const fuelMul = () => Math.max(0.25, S.fuelEff * (1 - FUEL_UP * (S.fuelUp || 0)));   // 보조 장비 '연료 효율'과 곱해서, 합계 최대 75% 감소
@@ -1638,7 +1678,7 @@ function updateDrones(dt, sx, sy, sz, R, cdm) {
 // 슈퍼 웨폰 아이콘 (단순한 선화)
 const SUPER_ICON = {
   bombard: '<path d="M16 2v9M10 4l3 7M22 4l-3 7"/><circle cx="16" cy="21" r="7"/><circle cx="16" cy="21" r="2.5"/>',
-  stasis: '<path d="M16 3v26M5 9.5l22 13M27 9.5l-22 13"/><path d="M12.5 5.5L16 9l3.5-3.5M12.5 26.5L16 23l3.5 3.5"/>',
+  pdef: '<circle cx="16" cy="16" r="6"/><path d="M16 3v4M28 12l-4 1M24 27l-2-3M8 27l2-3M4 12l4 1"/>',
   hole: '<path d="M16 16a2 2 0 1 1 2 2a4 4 0 1 1-6-3a6 6 0 1 1 9 6a8 8 0 1 1-13-7a10 10 0 1 1 16 9"/>',
   over: '<path d="M18 3L7 18h8l-2 11 12-16h-8z"/>',
   allies: '<path d="M16 4l4 8h-8zM8 17l4 8H4zM24 17l4 8h-8z"/><path d="M16 14v4M11 21h10" stroke-dasharray="2 2"/>',
@@ -1653,7 +1693,7 @@ const modOf = id => modded(id) ? MODS[id][S.mods[id]] : null;
 const superReady = id => superN(id) > 0 && !(S.superLock && S.superLock[id] > 0) && (!SUPERS[id].can || SUPERS[id].can());
 const mod2Of = id => { const v = S.mods2 && S.mods2[id]; return modded(id) && v != null ? MODS2[id][S.mods[id]][v] : null; };   // 적용된 2차 개조
 const NO_HOOK = {}, h2 = id => { const m = mod2Of(id); return m ? m.on : NO_HOOK; }, c2 = id => { const m = mod2Of(id); return m ? m.col : null; };   // 2차 개조 훅·색
-const statOf = (id, u) => { let s = WEAPONS[id].st(u); if (modded(id)) s = modOf(id).tweak(s); const m2 = mod2Of(id); return m2 ? m2.tweak(s) : s; };
+const statOf = (id, u) => { let s = WEAPONS[id].st(u); if (modded(id)) s = modOf(id).tweak(s); const m2 = mod2Of(id); if (m2) s = m2.tweak(s); const k = S.wDmg && S.wDmg[id]; return k ? { ...s, dmg: s.dmg * k } : s; };
 const wName = id => mod2Of(id) ? mod2Of(id).name : modded(id) ? modOf(id).name : WEAPONS[id].name;
 const wst = id => statOf(id, S.wu[id]);
 const ZERO_U = { dmg: 0, rate: 0, range: 0, spec: 0 }, wstAny = id => statOf(id, S.wu[id] || ZERO_U);   // 해금하지 않은 무기는 0레벨 성능(위성 드론용)
@@ -1730,7 +1770,7 @@ function reset() {
   renderLoadout(); renderSupers();
 }
 function clearField() {
-  allyWarps = []; holeShots = []; turned = []; aimOff();
+  allyWarps = []; holeShots = []; turned = []; turrets = []; pdefs = []; aimOff();
   edt.fill(0); zones = []; laters = [];
   nE = 0; bullets = []; missiles = []; mines = []; wells = []; beams = []; warps = []; holes = []; fxList = []; lines = [];
   ringPool.forEach(r => { r.life = 0; r.m.visible = false; });
@@ -1967,7 +2007,7 @@ function queueGroup(herd = false) {
 // 2차 웨이브: 1차 웨이브 무리가 최대치(무리당 450)에 닿는 누적 격파(WAVE2_AT, 약 28,000)를 넘은 만큼 2차 함선이 섞여 나옴.
 // 섞이는 비율 = 3% + 격파 1,000마다 1%p, 최대 30%. 2차 중 분열체 60%, 방벽함 25%, 포격함 15%(동시에 최대 LANCER_MAX)
 const WAVE2_AT = 28000, W2_BASE = 0.03, W2_GROW = 0.00001, W2_MAX = 0.3, LANCER_MAX = 12;
-const wave2Share = () => { const k = (S.spawnKills ?? S.kills) - WAVE2_AT; return k < 0 ? 0 : Math.min(W2_MAX, W2_BASE + k * W2_GROW); };
+const wave2Share = () => { const k = (S.spawnKills ?? S.kills) * ease() - WAVE2_AT; return k < 0 ? 0 : Math.min(W2_MAX, W2_BASE + k * W2_GROW); };
 const SPEED_OF = [1, 0.8, 0.9, 1.75, 1, 1, 1, 0.9, 0.9, 0.8];   // 종류별 속도 배율
 // 무리 하나는 최대 SPAWN_CAP기. 원래 무리 크기(groupWant)가 더 크면 그만큼 스폰 간격을 줄여(spawnGap) 같은 양이 나오게 함
 const SPAWN_CAP = 100;
@@ -2132,6 +2172,7 @@ function update(dt) {
     if (S.eliteFtlT <= 0) { S.eliteFtlT = ELITE_INT; eliteNearShip(); }
   }
   if (allies.length) updateAllies(dt);
+  if (pdefs.length) updatePdefs(dt);
   if (allyWarps.length) updateAllyWarps(dt);
   if (S.guardT > 0) S.guardT -= dt;
   for (let h = holeShots.length - 1; h >= 0; h--) {
@@ -2275,10 +2316,15 @@ function update(dt) {
     }
     if (eel[i] === 9) { lancerStep(i, dx, dy, dz, dist, dt, spdMul); continue; }   // 포격함
     if (dist < (eel[i] === 4 ? HERD_HIT_R : 1.2)) { shipHit(i); continue; }   // 집결함도 부딪히면 피해를 주고 파괴됨
-    if (allies.length && eel[i] < 4 && !elead[i]) {               // 분쟁 지역: 가장 가까운 함선(플레이어/아군)을 노림
-      let bi = -1, bd = dist * dist;
+    if ((allies.length || pdefs.length) && eel[i] < 4 && !elead[i]) {               // 분쟁 지역: 가장 가까운 함선(플레이어/아군)을 노림, 방어 포대가 있는 행성도
+      let bi = -1, bd = dist * dist, bp = null;
       for (let k = 0; k < allies.length; k++) { const A = allies[k].pos, qx = A.x - ex[i], qy = A.y - ey[i], qz = A.z - ez[i], q = qx * qx + qy * qy + qz * qz; if (q < bd) { bd = q; bi = k; } }
-      if (bi >= 0) {
+      for (const D of pdefs) { const P = planets[D.planet], q = Math.max(0, Math.hypot(P.pos.x - ex[i], P.pos.y - ey[i], P.pos.z - ez[i]) - P.R) ** 2; if (q < bd) { bd = q; bp = D; } }   // 행성은 표면까지 거리로
+      if (bp) {
+        const P = planets[bp.planet];
+        if (bd < PDEF_HIT * PDEF_HIT) { bp.hp -= ETYPE[eel[i]].dmg; fx(ex[i], ey[i], ez[i], [3, 1.8, 0.6], 2.4, 0.2); removeEnemy(i); continue; }
+        dx = P.pos.x - ex[i]; dy = P.pos.y - ey[i]; dz = P.pos.z - ez[i];
+      } else if (bi >= 0) {
         const A = allies[bi];
         if (bd < A.hitR2) { A.hp -= ETYPE[eel[i]].dmg; fx(ex[i], ey[i], ez[i], [0.8, 2.4, 1.2], 2.4, 0.2); removeEnemy(i); continue; }
         dx = A.pos.x - ex[i]; dy = A.pos.y - ey[i]; dz = A.pos.z - ez[i];
@@ -2512,6 +2558,7 @@ function doJump(announce = true) {
 function weapons(dt, sx, sy, sz) {
   const T = S.wt, R = S.range, cdm = S.cdMul * (S.overT > 0 ? 0.4 : 1);
   updateDrones(dt, sx, sy, sz, R, cdm);
+  if (turrets.length) updateTurrets(dt, R, cdm);
   updateHijack(dt);
   updateEffects2(dt);
   if (owned('gatling')) {
@@ -2863,6 +2910,9 @@ function visuals(dt, rdt) {
     for (const a of allies) { if (n >= allyGfx.max) break; pos.set([a.pos.x, a.pos.y, a.pos.z], n * 3); const h = a.hp / a.maxHp; col.set([0.6 + (1 - h) * 2, 2.6 * h + 0.4, 1.3 * h], n * 3); size[n++] = 1.3;
       if (a.big) { const tw = 1.15 + 0.2 * Math.sin(clock * 3); for (let c = 0; c < 3; c++) col[(n - 1) * 3 + c] *= tw; size[n - 1] = ETYPE[4].size; } }
     for (const a of allies) for (const D of a.drones) { if (n >= allyGfx.max) break; pos.set([D.pos.x, D.pos.y, D.pos.z], n * 3); col.set([0.7, 2.4, 1.6], n * 3); size[n++] = 0.7; }
+    const tw = 1 + 0.25 * Math.sin(clock * 4);
+    for (const T of turrets) { if (n >= allyGfx.max) break; pos.set([T.x, T.y, T.z], n * 3); col.set([0.6 * tw, 1.7 * tw, 3.4 * tw], n * 3); size[n++] = 1.5; }
+    for (const D of pdefs) { const h = D.hp / D.maxHp; for (const p of D.pos) { if (n >= allyGfx.max) break; pos.set([p.x, p.y, p.z], n * 3); col.set([3.2, 1.2 + 1.2 * h, 0.4 * h], n * 3); size[n++] = 1.4; } }
     allyGfx.flush(n); }
   { const { pos, col, size } = bulletGfx; let n = 0;
     for (const B of bullets) { pos.set([B.x, B.y, B.z], n * 3); col.set(B.col, n * 3); size[n++] = 0.7; }
@@ -2998,8 +3048,9 @@ function hud(dt) {
     $('bossTxt').textContent = S.mBuff > 0 ? `스웜 가속 중, ${Math.ceil(ehp[mi]).toLocaleString('ko-KR')}` : `${Math.ceil(ehp[mi]).toLocaleString('ko-KR')} / ${maxHp.toLocaleString('ko-KR')}`;
     $('bossHp').style.width = Math.max(0, ehp[mi] / maxHp * 100) + '%';
   }
-  const ar = $('allyRow'); ar.hidden = system.special !== 'conflict' && !allies.length && !allyWarps.length;
-  if (!ar.hidden) ar.innerHTML = system.special === 'conflict' ? `아군 함선 <b>${allies.length}</b> / ${ALLY_N}` : `아군 함선 <b>${allies.length}</b>${allyWarps.length ? `, ${allyWarps.length}척 도착 중` : ''}`;
+  const ar = $('allyRow'), nWarp = allyWarps.filter(W => !W.pdef).length, shipsOn = system.special === 'conflict' || allies.length || nWarp; ar.hidden = !shipsOn && !pdefs.length;
+  if (!ar.hidden) ar.innerHTML = [shipsOn ? (system.special === 'conflict' ? `아군 함선 <b>${allies.length}</b> / ${ALLY_N}` : `아군 함선 <b>${allies.length}</b>${nWarp ? `, ${nWarp}척 도착 중` : ''}`) : '',
+    ...pdefs.map(D => `${planets[D.planet].name} 방어 포대 <b>${Math.ceil(D.hp).toLocaleString('ko-KR')}</b> / ${D.maxHp.toLocaleString('ko-KR')}`)].filter(Boolean).join('<br>');
   $('ftlBar').style.width = Math.min(100, S.ftl / need * 100) + '%';
   const jb = $('jumpBtn'); jb.hidden = !ready;
   if (ready) { jb.disabled = S.jump >= 0; jb.firstChild.textContent = S.jump >= 0 ? `${S.next.title || S.next.name}까지 ${Math.ceil(S.jump)}초` : '다음 목적지 선택'; }
@@ -3084,7 +3135,7 @@ function drawDetail() {
 function buyTrack(id, t) {   // 무기 항목 강화 1단계 (한계·포인트 확인)
   if (S.wu[id][t] >= trackCap(id, t)) return false;
   const p = trackPrice(id, t); if (S.points < p) return false;
-  S.points -= p; S.wu[id][t]++; sfx('ui_upgrade', 0.7, 0.05);
+  spend(p); S.wu[id][t]++; sfx('ui_upgrade', 0.7, 0.05);
   renderLoadout(id); hudT = 0; hud(0);
   return true;
 }
@@ -3146,7 +3197,7 @@ function cardHtml(id) {   // 카드 한 장 (카드 선택 창과 점프 화면�
 function buyCard(id) {   // 카드 구매·적용 (가격 확인). 성공하면 true
   if (!id || unavailable(id)) return false;
   const p = cardPrice(id); if (S.points < p) return false;
-  S.points -= p; S.cardBuys = (S.cardBuys || 0) + 1; sfx('card', 0.7);
+  spend(p); S.cardBuys = (S.cardBuys || 0) + 1; sfx('card', 0.7);
   const sp = toScreen(ship.pos), inWarp = state === 'warp';   // 점프 화면에서는 탐사선 위 글자·고리를 띄우지 않음
   if (id.startsWith('w:')) {
     const wid = id.slice(2); S.wu[wid] = { dmg: 0, rate: 0, range: 0, spec: 0 }; renderLoadout(wid);
@@ -3191,12 +3242,48 @@ function superBombard() {
     shake = Math.min(1.6, shake + 1.2);
   }, 450);
 }
-function superStasis() {
-  sfx('stasis', 0.7);
-  const r2 = 80 * 80;
-  for (let i = 0; i < nE; i++) { if (isBoss(i)) continue; const dx = ex[i] - ship.pos.x, dz = ez[i] - ship.pos.z; if (dx * dx + dz * dz < r2) efrz[i] = 6; }
-  ring(ship.pos.clone(), 80, new THREE.Color(0.6, 1.4, 3), 1); ring(ship.pos.clone(), 50, new THREE.Color(0.8, 1.8, 3.2), 0.7);
-  fx(ship.pos.x, ship.pos.y, ship.pos.z, [1, 2, 3.4], 20, 0.4);
+// 행성 방어 포대: 탐사선에서 가장 가까운 행성(스웜 모체 제외)에 최대 레벨 유도 미사일 PDEF_N문을 72도 간격, 표면에서 PDEF_OFF 바깥에 설치.
+// 일반 스웜(종류 0-3)이 가까우면 행성을 노리고, 표면 PDEF_HIT 안에 닿으면 자기 피해만큼 깎고 사라짐. 체력 0이면 폭발. 이미 무장한 행성이면 체력만 다시 채움
+const PDEF_HP = 10000, PDEF_N = 5, PDEF_OFF = 1.5, PDEF_HIT = 6;
+let pdefs = [];
+function superPdef() {
+  let pi = -1, bd = Infinity;
+  planets.forEach((P, i) => { if (P.type === 'hive') return; const d = P.pos.distanceTo(ship.pos) - P.R; if (d < bd) { bd = d; pi = i; } });
+  if (pi < 0) return;
+  // 전함 호출과 같은 FTL 도착 연출(빛줄기 다발 + 행성에 조여드는 고리) 뒤에 무장
+  const a = Math.random() * Math.PI * 2, offs = [];
+  for (let k = 0; k < 17; k++) offs.push([rand(-12, 12), rand(-6, 6), rand(-12, 12)]);
+  allyWarps.push({ pdef: true, big: true, planet: pi, dir: [Math.cos(a), rand(-0.2, 0.2), Math.sin(a)], delay: 0, t: 0, dur: 2.6, offs, snd: false, pulse: 0, to: [0, 0, 0], from: [0, 0, 0] });
+  sfx('popup', 0.6); banner('행성 방어 포대', `${planets[pi].name}에 포대가 도착합니다`);
+}
+function armPlanet(pi) {
+  const P = planets[pi], ms = WEAPONS.missile.st(maxU('missile'));
+  let D = pdefs.find(q => q.planet === pi);
+  if (!D) pdefs.push(D = { planet: pi, mis: Array.from({ length: PDEF_N }, () => ({ t: rand(0.3, 1) })), pos: Array.from({ length: PDEF_N }, () => new THREE.Vector3()) });
+  D.hp = D.maxHp = PDEF_HP; D.s = ms; pdefPlace(D);
+  sfx('stasis', 0.7); ring(P.pos.clone(), P.R + 10, new THREE.Color(3, 1.8, 0.6), 0.8); ring(P.pos.clone(), P.R + 4, new THREE.Color(3.2, 2.4, 1), 0.5);
+  for (const p of D.pos) fx(p.x, p.y, p.z, [3.4, 2, 0.8], 6, 0.5);
+}
+function pdefPlace(D) {
+  const P = planets[D.planet], r = P.R + PDEF_OFF;
+  D.pos.forEach((p, q) => { const a = q * Math.PI * 2 / PDEF_N; p.set(P.pos.x + Math.cos(a) * r, P.pos.y, P.pos.z + Math.sin(a) * r); });
+}
+function updatePdefs(dt) {
+  for (let k = pdefs.length - 1; k >= 0; k--) {
+    const D = pdefs[k], P = planets[D.planet]; pdefPlace(D);
+    if (D.hp <= 0) {
+      pdefs.splice(k, 1); bigBoom(P.pos.x, P.pos.y, P.pos.z, 1, SHIP_BOOM, 0);
+      const sp = toScreen(P.pos); if (sp.vis) floatText(sp.x, sp.y, '행성 방어 포대 파괴', 'fuel');
+      continue;
+    }
+    if (S.halted) continue;
+    D.pos.forEach((p, q) => {
+      const m = D.mis[q]; m.t -= dt; if (m.t > 0) return;
+      if (nearest(p.x, p.y, p.z, 120) < 0) { m.t = 0.3; return; }
+      m.t = D.s.int; const ox = p.x - P.pos.x, oz = p.z - P.pos.z, ol = Math.hypot(ox, oz) || 1;
+      for (let n = 0; n < D.s.count && missiles.length < 160; n++) missiles.push({ p: p.clone(), v: new THREE.Vector3(ox / ol + rand(-0.4, 0.4), rand(0.2, 0.6), oz / ol + rand(-0.4, 0.4)).normalize().multiplyScalar(9), life: 0, tgt: null, retarget: 0, dmg: D.s.dmg, r: D.s.r, seek: 120, split: false, ally: true });
+    });
+  }
 }
 let holeShots = [];
 function superHole(target) {
@@ -3238,9 +3325,14 @@ function updateAllyWarps(dt) {
     if (!W.snd && W.t >= W.dur - WARP_LEAD) { W.snd = true; sfx('warp', W.big ? 0.45 : 0.4, 0, W.big ? 1 : 1.25); }
     if (W.big) {
       W.pulse -= dt;
-      if (W.pulse <= 0) { W.pulse = 0.28; ring(W.at.clone(), 26 * (1 - W.t / W.dur) + 8, new THREE.Color(0.5, 2.4, 1.2), 0.5, true); }
+      if (W.pulse <= 0) { W.pulse = 0.28; ring(to.clone(), 26 * (1 - W.t / W.dur) + 8 + (W.pdef ? planets[W.planet].R : 0), new THREE.Color(0.5, 2.4, 1.2), 0.5, true); }
     }
-    if (W.t >= W.dur && W.big) {
+    if (W.t >= W.dur && W.pdef) {
+      armPlanet(W.planet); const P = planets[W.planet], c = P.pos.clone(); sfx('herd', 0.85, 0, 1.1);
+      fx(c.x, c.y, c.z, [3.4, 2.4, 1], 46 + P.R * 2, 0.6); ring(c, 40 + P.R, new THREE.Color(3, 2, 0.8), 0.9);
+      shake = Math.min(1.6, shake + Math.max(0.25, 0.9 - c.distanceTo(ship.pos) / 250));
+      allyWarps.splice(w, 1);
+    } else if (W.t >= W.dur && W.big) {
       const a = makeBattleship(W.at); allies.push(a);
       const c = a.pos.clone(); sfx('herd', 0.85, 0, 1.1);
       fx(c.x, c.y, c.z, [1.6, 3.4, 2], 46, 0.6); fx(c.x, c.y, c.z, [0.4, 1.8, 0.9], 80, 1.1);
@@ -3340,7 +3432,7 @@ function drawArmory() {
   const tabs = {
     shop: ['강화와 환전', () => `<div class="ar-sec">강화와 환전</div>${shop}`],
     hull: ['선체', () => `<div class="ar-sec">선체</div>${hull}`],
-    drone: ['위성 드론', () => `<div class="ar-sec">위성 드론 (무기는 탐사선의 강화·개조를 그대로 따름)</div>${droneHtml()}`],
+    drone: ['위성 드론', () => `<div class="ar-sec">위성 드론 (무기는 탐사선의 강화·개조를 그대로 따름)</div>${droneHtml()}${turretHtml()}`],
     super: ['슈퍼 웨폰', () => `<div class="ar-sec">슈퍼 웨폰 (소모품, 숫자 키로 사용)</div><div class="ar-grid">${sup}</div>`],
     mods: ['개조', () => `<div class="ar-sec">개조는 하나만 적용됩니다.
 다른 개조 클릭 시, 포인트 소모 후 변경 가능.</div>${mods}`],
@@ -3366,7 +3458,7 @@ $('armoryBody').addEventListener('click', e => {
     S.sp -= D.cost; S.supers[id] = superN(id) + 1; renderSupers();
   } else if ('buySp' in b.dataset) {
     if (S.points < SP_PRICE) return;
-    S.points -= SP_PRICE; S.sp += 1;   // 구매한 특수 능력 포인트는 누적 합계(새 게임 보너스)에 쌓이지 않음
+    spend(SP_PRICE); S.sp += 1;   // 구매한 특수 능력 포인트는 누적 합계(새 게임 보너스)에 쌓이지 않음
   } else if ('buyCap' in b.dataset) {
     const c = capCost(); if (S.sp < c) return;
     S.sp -= c; S.capBonus = (S.capBonus || 0) + 1; renderLoadout(); updateLoadout();
@@ -3376,6 +3468,10 @@ $('armoryBody').addEventListener('click', e => {
   } else if ('buyDrone' in b.dataset) {
     const c = droneCost(); if ((S.drones || 0) >= DRONE_MAX || S.sp < c) return;
     S.sp -= c; S.drones = (S.drones || 0) + 1;
+  } else if ('buyTurret' in b.dataset) {
+    if (S.sp < TURRET_COST) return;
+    S.sp -= TURRET_COST; const p = ship.pos; turrets.push({ x: p.x, y: p.y, z: p.z, t: 0.2 });
+    ring(p.clone(), 6, new THREE.Color(0.6, 1.7, 3.4), 0.6); sfx('ui_upgrade', 0.9);
   } else if ('buyFuel' in b.dataset) {
     const c = fuelUpCost(); if ((S.fuelUp || 0) >= FUEL_UP_MAX || S.sp < c) return;
     S.sp -= c; S.fuelUp = (S.fuelUp || 0) + 1;
@@ -3499,6 +3595,7 @@ addEventListener('keydown', e => {
     return;
   }
   if (state === 'offer' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) { e.preventDefault(); return navOffer(e.code === 'ArrowLeft' ? -1 : 1); }
+  if (runActive && (e.code === 'BracketLeft' || e.code === 'BracketRight')) { e.preventDefault(); return setSpeed(speedI + (e.code === 'BracketLeft' ? -1 : 1)); }
   if (state !== 'play') return;
   if (e.code === 'KeyQ') openOffer();
   if (e.code === 'KeyJ') startJump();
@@ -3510,7 +3607,7 @@ addEventListener('keydown', e => {
 // UI를 숨기고, 탐사선은 피해를 받지 않으며 연료가 무한. 카메라 연출, 슬로모션, 장면 호출 키를 제공
 let capture = false, capTime = 1, capCam = 0, capDist = 150, capToastT = 0;
 const CAP_CAMS = ['자유 시점', '천천히 회전', '근접 추적', '항성계 전경'];
-const CAP_HELP = '촬영 모드 (Ctrl+Shift+P로 끄기)\nC 카메라 전환 · T 슬로모션 · H 도움말\n1 스웜 대군 · 2 집결함 · 3 정예 스웜 · 4 마더쉽 · 5 동맹 호출\n6 블랙홀 · 7 궤도 폭격 · 8 정지장 · 9 과부하 · 0 무기 전부 최대\nF FTL 도약 연출 · X 스웜 모두 제거';
+const CAP_HELP = '촬영 모드 (Ctrl+Shift+P로 끄기)\nC 카메라 전환 · T 슬로모션 · H 도움말\n1 스웜 대군 · 2 집결함 · 3 정예 스웜 · 4 마더쉽 · 5 동맹 호출\n6 블랙홀 · 7 궤도 폭격 · 8 행성 방어 포대 · 9 과부하 · 0 무기 전부 최대\nF FTL 도약 연출 · X 스웜 모두 제거';
 function capToast(msg, sec = 1.6) {
   const el = $('capToast'); el.textContent = msg; el.classList.add('show');
   clearTimeout(capToastT); capToastT = setTimeout(() => el.classList.remove('show'), sec * 1000);
@@ -3555,13 +3652,13 @@ function captureKey(e) {
   else if (d === 5) superAllies();
   else if (d === 6) superHole(swarmCenter());
   else if (d === 7) superBombard();
-  else if (d === 8) superStasis();
+  else if (d === 8) superPdef();
   else if (d === 9) superOver();
   else if (d === 0) {
     for (const id in WEAPONS) { S.wu[id] = S.wu[id] || { dmg: 0, rate: 0, range: 0, spec: 0 }; for (const t of tracksOf(id)) S.wu[id][t] = trackCap(id, t); }
     renderLoadout();
   }
-  capToast(['무기 전부 최대', '스웜 대군', '집결함', '정예 스웜', '마더쉽', '동맹 호출', '블랙홀', '궤도 폭격', '정지장', '과부하'][d], 1.2);
+  capToast(['무기 전부 최대', '스웜 대군', '집결함', '정예 스웜', '마더쉽', '동맹 호출', '블랙홀', '궤도 폭격', '행성 방어 포대', '과부하'][d], 1.2);
   return true;
 }
 
@@ -3592,7 +3689,7 @@ function bestText(b) { return `최고 기록 <b>항성계 ${b.sector || 1}</b> �
 function showMenu() {
   if (capture) setCapture(false);
   state = 'menu'; $('hud').classList.add('off');
-  $('pauseOv').hidden = $('overOv').hidden = $('detailOv').hidden = $('armoryOv').hidden = $('mapOv').hidden = true; $('menuOv').hidden = false;
+  $('pauseOv').hidden = $('overOv').hidden = $('detailOv').hidden = $('armoryOv').hidden = $('mapOv').hidden = $('traitOv').hidden = $('diffOv').hidden = true; $('menuOv').hidden = false;
   $('continueBtn').hidden = !runActive;
   const sv = store.get('save', null), lb = $('loadBtn'); lb.hidden = !sv;
   if (sv) lb.textContent = `안전구역에서 이어하기 (항성계 ${sv.S.sector}, ${fmtTime(sv.S.time)})`;
@@ -3620,12 +3717,71 @@ function loadGame() {
   $('menuOv').hidden = $('overOv').hidden = $('pauseOv').hidden = $('detailOv').hidden = $('armoryOv').hidden = $('mapOv').hidden = true; $('hud').classList.remove('off');
   state = 'play';
 }
-function startRun() {
+// ---------- 특성: 새 게임 전에 고름. 특성 포인트 = 1 + 지금까지 쓴 포인트(적 격파로 얻은 포인트) TRAIT_STEP마다 1. 단점(cost < 0)은 포인트를 돌려줌 ----------
+const TRAIT_STEP = 500000;
+const spend = p => { S.points -= p; store.set('spent', store.get('spent', 0) + p); };   // 쓴 포인트를 판과 상관없이 누적
+const traitPts = () => 1 + Math.floor(store.get('spent', 0) / TRAIT_STEP);
+const wBoost = (id, k) => { (S.wDmg ||= {})[id] = (S.wDmg[id] || 1) * k; };
+const wStart = id => { S.wu[id] ||= { ...ZERO_U }; wBoost(id, 1.2); };
+const TRAITS = {
+  gatling: { name: '개틀링 숙련', cost: 1, desc: '개틀링 건 피해 +50%', on: () => wBoost('gatling', 1.5) },
+  missile: { name: '미사일 특화', cost: 1, desc: '유도 미사일을 장착하고 시작\n유도 미사일 피해 +20%', on: () => wStart('missile') },
+  laser:   { name: '레이저 특화', cost: 1, desc: '레이저를 장착하고 시작\n레이저 피해 +20%', on: () => wStart('laser') },
+  chain:   { name: '번개 특화', cost: 1, desc: '연쇄 번개를 장착하고 시작\n연쇄 번개 피해 +20%', on: () => wStart('chain') },
+  rail:    { name: '레일건 특화', cost: 1, desc: '레일건을 장착하고 시작\n레일건 피해 +20%', on: () => wStart('rail') },
+  mine:    { name: '기뢰 특화', cost: 1, desc: '플라즈마 기뢰를 장착하고 시작\n플라즈마 기뢰 피해 +20%', on: () => wStart('mine') },
+  power:   { name: '화력 집중', cost: 2, desc: '모든 무기 피해 +15%', on: () => { S.dmgMul *= 1.15; } },
+  rapid:   { name: '속사 회로', cost: 2, desc: '모든 무기 발사 간격 −10%', on: () => { S.cdMul *= 0.9; } },
+  scope:   { name: '장거리 조준', cost: 1, desc: '모든 무기 사거리 +15%', on: () => { S.range *= 1.15; } },
+  hull:    { name: '강화 선체', cost: 1, desc: '최대 체력 +50', on: () => { S.maxHp += 50; S.hp += 50; } },
+  tank:    { name: '보조 연료 탱크', cost: 1, desc: '최대 연료 +100', on: () => { S.maxFuel += 100; } },
+  bounty:  { name: '현상금 사냥꾼', cost: 1, desc: '격파 포인트 +25%', on: () => { S.pointMul *= 1.25; } },
+  mech:    { name: '정비 숙련', cost: 1, desc: '무기 강화·해금 가격 −15%', on: () => { S.discount *= 0.85; } },
+  supply:  { name: '비상 보급', cost: 1, desc: '특수 능력 포인트 3을 가지고 시작', on: () => { S.sp += 3; } },
+  drone:   { name: '드론 편대', cost: 1, desc: '1번 위성 드론을 가지고 시작', on: () => { S.drones = Math.max(S.drones || 0, 1); } },
+  weak:    { name: '낡은 선체', cost: -1, desc: '최대 체력 −30', on: () => { S.maxHp -= 30; S.hp = Math.min(S.hp, S.maxHp); } },
+  leak:    { name: '연료 누수', cost: -1, desc: '이동 연료 소모 +30%', on: () => { S.fuelEff *= 1.3; } },
+  dull:    { name: '무딘 포신', cost: -1, desc: '모든 무기 피해 −10%', on: () => { S.dmgMul *= 0.9; } },
+  tough:   { name: '단단한 스웜', cost: -1, desc: '적 내구도 +20%', on: () => { S.foeHp = 1.2; } },
+  poor:    { name: '빈약한 수입', cost: -1, desc: '격파 포인트 −20%', on: () => { S.pointMul *= 0.8; } },
+};
+let traitSel = new Set((store.get('traits', []) || []).filter(k => TRAITS[k]));   // 지난번 고른 특성을 기억
+const traitUsed = () => [...traitSel].reduce((a, k) => a + TRAITS[k].cost, 0);
+if (traitUsed() > traitPts()) traitSel.clear();
+function drawTraits() {
+  const tot = traitPts(), left = tot - traitUsed(), spent = store.get('spent', 0), f = n => Math.floor(n).toLocaleString('ko-KR');
+  $('traitMeta').textContent = `남은 특성 포인트 ${left} / ${tot}\n누적 사용 포인트 ${f(spent)}, 다음 특성 포인트까지 ${f(TRAIT_STEP - spent % TRAIT_STEP)}`;
+  const card = k => { const T = TRAITS[k], on = traitSel.has(k), can = on ? left - (T.cost < 0 ? -T.cost : 0) >= 0 : T.cost <= left;
+    return `<button class="ar${on ? ' own' : ''}" data-trait="${k}" aria-pressed="${on}" ${can ? '' : 'disabled'}><b>${T.name}</b><p>${T.desc}</p><small>${T.cost > 0 ? `특성 포인트 ${T.cost}` : `특성 포인트 +${-T.cost}`}${on ? ' · 선택됨' : ''}</small></button>`; };
+  const ids = Object.keys(TRAITS);
+  $('traitBody').innerHTML = `<div class="ar-sec">특성</div><div class="ar-grid">${ids.filter(k => TRAITS[k].cost > 0).map(card).join('')}</div>
+    <div class="ar-sec">단점 (고르면 특성 포인트를 얻음)</div><div class="ar-grid">${ids.filter(k => TRAITS[k].cost < 0).map(card).join('')}</div>`;
+  $('traitGo').disabled = left < 0;
+}
+$('traitBody').addEventListener('click', e => {
+  const b = e.target.closest('[data-trait]'); if (!b || b.disabled) return;
+  const k = b.dataset.trait; if (traitSel.has(k)) traitSel.delete(k); else traitSel.add(k);
+  sfx('card', 0.4); drawTraits();
+});
+function openTraits() {
   if (capture) setCapture(false);
-  reset(); runActive = true; cam.az = 0.7; cam.pol = 0.92; cam.dist = 150; menuSpin = 0;
+  state = 'menu'; $('hud').classList.add('off');
+  $('menuOv').hidden = $('pauseOv').hidden = $('overOv').hidden = $('diffOv').hidden = true; $('traitOv').hidden = false;
+  drawTraits(); $('traitOv').querySelector('.sheet').scrollTop = 0; $('traitGo').focus({ preventScroll: true });
+}
+$('traitGo').onclick = () => { if (traitUsed() > traitPts()) return; $('traitOv').hidden = true; $('diffOv').hidden = false; $('diffOv').querySelector('[data-diff="normal"]').focus(); };
+$('traitBack').onclick = showMenu;
+$('diffBack').onclick = openTraits;
+$('diffOv').addEventListener('click', e => { const b = e.target.closest('[data-diff]'); if (b) startRun(b.dataset.diff); });
+function startRun(diff = 'normal') {
+  if (capture) setCapture(false);
+  reset(); runActive = true;
+  S.diff = diff === 'easy' ? 'easy' : 'normal'; S.traits = [...traitSel]; store.set('traits', S.traits);
+  for (const k of S.traits) TRAITS[k].on();
+  renderLoadout(); renderSupers(); cam.az = 0.7; cam.pol = 0.92; cam.dist = 150; menuSpin = 0;
   const spBonus = grantSpBank();
   if (spBonus) setTimeout(() => { if (runActive) banner(`특수 능력 포인트 +${spBonus}`, `누적 특수 능력 포인트 ${spBonus * SP_BANK_STEP} 사용`); }, 3800);
-  $('menuOv').hidden = $('overOv').hidden = $('pauseOv').hidden = $('detailOv').hidden = $('armoryOv').hidden = $('mapOv').hidden = true; $('hud').classList.remove('off');
+  $('menuOv').hidden = $('overOv').hidden = $('pauseOv').hidden = $('detailOv').hidden = $('armoryOv').hidden = $('mapOv').hidden = $('traitOv').hidden = $('diffOv').hidden = true; $('hud').classList.remove('off');
   state = 'play';
   if (!store.get('best', null) && !store.get('tutDone', false)) setTimeout(() => { if (state === 'play' && S.time < 1) startTutorial(); }, 400);
 }
@@ -3698,13 +3854,13 @@ function gameOver() {
     <div><span>격파</span>${S.kills.toLocaleString('ko-KR')}</div><div><span>무기 레벨 합</span>${Object.keys(S.wu).reduce((a, id) => a + wl(id), 0)}</div>`;
   $('overOv').hidden = false; $('againBtn').focus();
 }
-$('newBtn').onclick = startRun;
+$('newBtn').onclick = openTraits;
 $('loadBtn').onclick = loadGame;
 $('continueBtn').onclick = () => { $('menuOv').hidden = true; $('hud').classList.remove('off'); state = 'pause'; togglePause(); };
 $('resumeBtn').onclick = togglePause;
-$('restartBtn').onclick = startRun;
+$('restartBtn').onclick = openTraits;
 $('toMenuBtn').onclick = showMenu;
-$('againBtn').onclick = startRun;
+$('againBtn').onclick = openTraits;
 $('overMenuBtn').onclick = showMenu;
 function applyOpts() { bloom.strength = opts.glow; store.set('glow', opts.glow); store.set('sens', opts.sens); store.set('labels', opts.labels); store.set('shake', opts.shake); store.set('vol', opts.vol); store.set('bgm', opts.bgm); if (audio.master) audio.master.gain.value = opts.vol; if (bgm.el) bgm.el.volume = opts.bgm; }
 $('optBgm').value = opts.bgm; $('optBgm').oninput = e => { opts.bgm = +e.target.value; applyOpts(); };
@@ -3723,14 +3879,25 @@ function resize() {
 }
 addEventListener('resize', resize);
 
+// ---------- 게임 속도: 화면 위 버튼, [ ] 키 ----------
+const SPEEDS = [0.25, 0.5, 1, 2, 3];
+let speedI = 2;
+function setSpeed(i) {
+  speedI = Math.max(0, Math.min(SPEEDS.length - 1, i));
+  $('speedBar').querySelectorAll('button').forEach((b, k) => { b.classList.toggle('on', k === speedI); b.setAttribute('aria-pressed', k === speedI); });
+}
+$('speedBar').innerHTML = SPEEDS.map((v, k) => `<button data-spd="${k}">×${v}</button>`).join('');
+$('speedBar').addEventListener('click', e => { const b = e.target.closest('[data-spd]'); if (b) { setSpeed(+b.dataset.spd); b.blur(); } });
+setSpeed(speedI);
+
 // ---------- loop ----------
 reset(); resize(); showMenu();
 let last = performance.now();
 function frame(now) {
   const rdt = Math.min(0.05, (now - last) / 1000); last = now;
-  const dt = state === 'play' ? rdt * (capture ? capTime : 1) * (preview ? PREVIEW_SLOW : 1) : 0;   // 이동 경로를 확인하는 동안 느리게
+  const dt = state === 'play' ? rdt * (capture ? capTime : 1) * (preview ? PREVIEW_SLOW : 1) * SPEEDS[speedI] : 0;   // 이동 경로를 확인하는 동안 느리게
   if (capture && state === 'play' && S) S.fuel = S.maxFuel;
-  if (state === 'play') update(dt);
+  { const n = Math.ceil(SPEEDS[speedI]); for (let q = 0; q < n && state === 'play'; q++) update(dt / n); }   // 빠르게 돌 때는 나눠서 (한 번에 큰 dt면 충돌을 건너뜀)
   if (state === 'menu') { movePlanets(rdt * 4); if (ship.mode === 'orbit') { ship.ang += 0.25 * rdt; placeOnOrbit(); } }
   visuals(state === 'menu' || state === 'exit' ? rdt : dt, rdt);
   if (state === 'exit' && exitFx) exitStep(rdt);          // 탐사선 표시 위치를 덮어쓰므로 visuals 뒤에
@@ -3741,7 +3908,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.__dbg = { get S() { return S; }, wst, groupWant, spawnGap, SPAWN_CAP, bestLineDir, setE: (i, x, y, z) => { ex[i] = x; ey[i] = y; ez[i] = z; erad[i] = 0; }, setNE: n => { nE = n; }, doJump, enterSystem, randomSystem, firstSystem, rollDestinations, update: dt => update(dt), useSuper, get nE() { return nE; }, get allies() { return allies; }, motherIdx, get state() { return state; }, set state(v) { state = v; }, saveGame, loadGame, get system() { return system; }, hitAll: d => { for (let i = nE - 1; i >= 0; i--) hitEnemy(i, d); }, useSuperAt: (id, x, z) => useSuper(id, new THREE.Vector3(x, 0, z)), get aiming() { return aiming; }, get allyWarps() { return allyWarps; }, hitMother: d => { const i = motherIdx(); if (i >= 0) hitEnemy(i, d); }, renderLoadout, renderSupers, cardPrice, earnSp, hpMul, MAX_E, get missiles() { return missiles; }, get mines() { return mines; }, get shipPos() { return ship.pos; }, eel, euid, esp, escat, elane, elead, ecd, evx, evy, evz, blast, planetPos: k => planets[k].pos.clone(), getE: i => [ex[i], ey[i], ez[i]], drones, get mines() { return mines; }, fuelMul, planTransfer, simTransfer, get ship() { return ship; }, go: (ti, dest) => { preview = { target: ti, dest }; launch(); }, showRoute: (ti, dest) => { preview = { target: ti, dest }; refreshPreview(); }, cancelPreview, pierceRes, lineHit, ehp, spawnAt, hiveIdx, get turned() { return turned; } };
+window.__dbg = { get S() { return S; }, get pdefs() { return pdefs; }, get turrets() { return turrets; }, TRAITS, traitPts, startRun, setSpeed, get speed() { return SPEEDS[speedI]; }, wst, groupWant, spawnGap, SPAWN_CAP, bestLineDir, setE: (i, x, y, z) => { ex[i] = x; ey[i] = y; ez[i] = z; erad[i] = 0; }, setNE: n => { nE = n; }, doJump, enterSystem, randomSystem, firstSystem, rollDestinations, update: dt => update(dt), useSuper, get nE() { return nE; }, get allies() { return allies; }, motherIdx, get state() { return state; }, set state(v) { state = v; }, saveGame, loadGame, get system() { return system; }, hitAll: d => { for (let i = nE - 1; i >= 0; i--) hitEnemy(i, d); }, useSuperAt: (id, x, z) => useSuper(id, new THREE.Vector3(x, 0, z)), get aiming() { return aiming; }, get allyWarps() { return allyWarps; }, hitMother: d => { const i = motherIdx(); if (i >= 0) hitEnemy(i, d); }, renderLoadout, renderSupers, cardPrice, earnSp, hpMul, MAX_E, get missiles() { return missiles; }, get mines() { return mines; }, get shipPos() { return ship.pos; }, eel, euid, esp, escat, elane, elead, ecd, evx, evy, evz, blast, planetPos: k => planets[k].pos.clone(), planetR: k => planets[k].R, getE: i => [ex[i], ey[i], ez[i]], drones, get mines() { return mines; }, fuelMul, planTransfer, simTransfer, get ship() { return ship; }, go: (ti, dest) => { preview = { target: ti, dest }; launch(); }, showRoute: (ti, dest) => { preview = { target: ti, dest }; refreshPreview(); }, cancelPreview, pierceRes, lineHit, ehp, spawnAt, hiveIdx, get turned() { return turned; } };
 </script>
 <script>
 addEventListener('error', e => { const el = document.getElementById('err'); el.style.display = 'block'; el.textContent = '오류: ' + e.message; });
