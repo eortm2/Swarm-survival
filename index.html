@@ -1507,7 +1507,7 @@ const WEAPONS = {
     st: u => ({ int: 2.3 * 0.88 ** u.rate, dmg: 2.5 * 1.2 ** u.dmg, r: 4.8 * 1.12 ** u.range, cap: 18 + 6 * u.spec }),
     rateText: s => `설치 간격 ${f1(s.int)}초`, rangeText: s => f1(s.r * Math.min(S.range, 1.5)), specText: s => `최대 ${s.cap}개` },
   missile: { name: '유도 미사일', unlock: 130, base: 85, specMax: 3, specLabel: '동시 발사', rangeLabel: '폭발 반경', desc: '적을 추적하는 미사일, 작은 범위 폭발',
-    st: u => ({ int: 2.8 * 0.88 ** u.rate, dmg: 2 * 1.2 ** u.dmg, r: 4.2 * 1.12 ** u.range, count: 1 + u.spec, seek: 120 }),
+    st: u => ({ int: 2.8 * 0.88 ** u.rate, dmg: 1.2 * 1.2 ** u.dmg, r: 4.2 * 1.12 ** u.range, count: 1 + u.spec, seek: 120 }),
     rateText: s => `간격 ${f1(s.int)}초`, rangeText: s => f1(s.r * S.range), specText: s => `${s.count}발` },
   chain: { name: '연쇄 번개', unlock: 140, base: 90, specMax: 4, specLabel: '튕김 횟수', rangeLabel: '튕김 거리', desc: '적에게 번개를 떨어뜨려 주변 적으로 튕김',
     st: u => ({ period: 3.3 * 0.88 ** u.rate, dmg: 2.4 * 1.2 ** u.dmg, jump: 12 * 1.12 ** u.range, hops: 5 * (4 + u.spec), seek: 40 }),
