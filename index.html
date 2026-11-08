@@ -292,6 +292,8 @@ body.capture #hud{visibility:hidden}
 #talk[hidden]{display:none}
 #talk.out{opacity:0}
 .tk-face{flex:none;width:72px;height:72px;border:1px solid rgba(203,213,234,.25);border-radius:6px;background:#000 url(momo.webp) 0 0/400% 400% no-repeat}
+.tk-face.hp50{background-image:url(momo_hp50.webp)}
+.tk-face.hp15{background-image:url(momo_hp15.webp)}
 .tk-body{min-width:0}
 .tk-body b{font-size:18px;color:#7FD4FF;font-weight:600}
 .tk-body p{margin:2px 0 0;font-size:19.5px;line-height:1.45}
@@ -305,6 +307,7 @@ body.capture #hud{visibility:hidden}
 #diffOv .ar-grid{margin:14px 0}
 @media (max-width:820px){.ar-grid3{grid-template-columns:1fr}}
 </style>
+<link rel="preload" as="image" href="momo_hp50.webp"><link rel="preload" as="image" href="momo_hp15.webp">
 <script src="momo-lines.js"></script>
 <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
@@ -413,9 +416,9 @@ body.capture #hud{visibility:hidden}
       <button class="ghost" id="tutAgainBtn">튜토리얼 다시 보기</button>
     </div>
     <p id="nowPlaying" class="detail-meta" style="margin:12px 0 0"></p>
-    <label class="opt" for="optGlow">광원 효과 세기<input type="range" id="optGlow" min="0" max="2" step="0.1" value="0.9"></label>
+    <label class="opt" for="optGlow">광원 효과 세기<input type="range" id="optGlow" min="0" max="2" step="any" value="0.63"></label>
     <label class="opt" for="optSens">시점 회전 감도<input type="range" id="optSens" min="0.4" max="2" step="0.1" value="1"></label>
-    <label class="opt" for="optBgm">배경 음악 크기<input type="range" id="optBgm" min="0" max="1" step="0.05" value="0.45"></label>
+    <label class="opt" for="optBgm">배경 음악 크기<input type="range" id="optBgm" min="0" max="1" step="any" value="0.225"></label>
     <label class="opt" for="optVol">효과음 크기<input type="range" id="optVol" min="0" max="1" step="0.05" value="0.6"></label>
     <label class="opt" for="optShake">피격 시 화면 흔들림<input type="checkbox" id="optShake" checked style="width:auto;justify-self:end"></label>
     <label class="opt" for="optLabels">행성 이름 표시<input type="checkbox" id="optLabels" checked style="width:auto;justify-self:end"></label>
@@ -617,7 +620,7 @@ scene.background = new THREE.Color(0x03050b);
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, 4000);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.9, 0.5, 0.82);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.63, 0.5, 0.82);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 const ambient = new THREE.AmbientLight(0x30405e, 0.9); scene.add(ambient);
@@ -1899,7 +1902,7 @@ const cardBase = id => id.startsWith('w:') ? Math.round(WEAPONS[id.slice(2)].unl
 
 // ---------- state ----------
 let S, ship, state = 'menu', runActive = false, preview = null, currentOffer = null;
-const opts = { glow: store.get('glow', 0.9), sens: store.get('sens', 1), labels: store.get('labels', true), vol: store.get('vol', 0.6), bgm: store.get('bgm', 0.45), shake: store.get('shake', !matchMedia('(prefers-reduced-motion: reduce)').matches) };
+const opts = { glow: store.get('glow', 0.63), sens: store.get('sens', 1), labels: store.get('labels', true), vol: store.get('vol', 0.6), bgm: store.get('bgm', 0.225), shake: store.get('shake', !matchMedia('(prefers-reduced-motion: reduce)').matches) };
 const cam = { az: 0.7, pol: 0.92, dist: 150, target: new THREE.Vector3() };
 let hitFlash = 0, shake = 0;
 // 보조 장비 카드가 바꾸는 능력치의 초기값 (도약 시 이 값으로 되돌림)
@@ -3950,7 +3953,7 @@ const MOMO = (() => {
   }).filter(Boolean);
   const milestone = {}; for (const [n, l] of Object.entries(src['사망 횟수'] || {})) if (Array.isArray(l)) milestone[n] = line(l);
   return { greet: list(src['인사']), hidden: list(src['숨은 인사']), tips, rush: list(src['연속 이동']), lowFuel: list(src['연료 부족']), lowHp: list(src['체력 낮음']),
-    ftl: list(src['FTL 충전']), combo, seen: byEnemy(src['첫 출현']), hitAny: list(src['피격 공통']), hit: byEnemy(src['피격']),
+    ftl: list(src['FTL 충전']), ftlCrit: list(src['FTL 충전 (위기)']), combo, seen: byEnemy(src['첫 출현']), hitAny: list(src['피격 공통']), hit: byEnemy(src['피격']),
     dying: list(src['마지막 순간']), firstDeath: list(src['첫 죽음']), milestone };
 })();
 const HIT_TALK_P = 0.3, HIT_TALK_CD = 5;   // 피격 대사: 맞을 때 30% 확률, 한 번 말하면 5초 쉼
@@ -3959,7 +3962,7 @@ const pickOne_ = a => a && a.length ? a[Math.floor(Math.random() * a.length)] : 
 const faceAt = (el, f) => { el.style.backgroundPosition = `${(f % 4) * 100 / 3}% ${Math.floor(f / 4) * 100 / 3}%`; };   // 시트에서 표정 칸 고르기
 // 대사창은 한 번에 하나. 떠 있는 동안 생긴 일은 버리고(사라진 뒤 생긴 일만 유효), 같은 순간에 겹친 대사는 우선순위가 높은 것(죽음 관련 2)을,
 // 같으면 무작위로 하나 고름. 고른 대사만 onShown을 불러서 쿨타임·한 번만 말하기 표시를 남김(밀린 대사는 다음 기회에 다시 나올 수 있음)
-const PRIO_DEATH = 2;
+const PRIO_DEATH = 2, MOMO_HP50 = 0.5, MOMO_HP15 = 0.15;   // 초상화 시트를 바꾸는 선체 비율
 let talkBusy = false, talkTimer = 0, talkCand = [], talkFlushQ = false, afterTalk = null, momoTip = null;
 function say(line, prio = 0, onShown = null) {   // line = [문구, 표정] (문자열이면 기본 표정)
   const l = Array.isArray(line) ? line : [line, F.base];
@@ -3975,7 +3978,9 @@ function flushTalk() {
 }
 function showTalk([text, face]) {
   const el = $('talk'); talkBusy = true;
-  $('talkText').textContent = text; faceAt(el.querySelector('.tk-face'), face); el.classList.remove('out'); el.hidden = false;
+  const fc = el.querySelector('.tk-face'), hr = S ? S.hp / S.maxHp : 1;   // 선체 50% 이하·15% 이하면 잡음이 낀 초상화 시트로
+  fc.classList.toggle('hp50', hr <= MOMO_HP50 && hr > MOMO_HP15); fc.classList.toggle('hp15', hr <= MOMO_HP15);
+  $('talkText').textContent = text; faceAt(fc, face); el.classList.remove('out'); el.hidden = false;
   talkTimer = setTimeout(() => {
     el.classList.add('out');
     talkTimer = setTimeout(() => { el.hidden = true; talkBusy = false; talkTimer = 0; const f = afterTalk; afterTalk = null; if (f) f(); }, 320);
@@ -3997,7 +4002,10 @@ function momoTick(dt) {
   if (S.hp < S.maxHp * 0.15 && !M.dying) { const l = pickOne_(MOMO.dying); say(l, PRIO_DEATH, () => { M.dying = l[0]; }); }
   else if (S.hp < S.maxHp * 0.3) sayCd('hp', 60, pickOne_(MOMO.lowHp));
   if (S.fuel < S.maxFuel * 0.15) sayCd('fuel', 90, pickOne_(MOMO.lowFuel));
-  if (ftlNeed() > 0 && S.ftl >= ftlNeed() && M.ftlSys !== S.sector && system.special !== 'safe') say(pickOne_(MOMO.ftl), 0, () => { M.ftlSys = S.sector; });
+  if (ftlNeed() > 0 && S.ftl >= ftlNeed() && M.ftlSys !== S.sector && system.special !== 'safe') {   // 체력 15% 이하에서 충전되면 위기 대사(죽음 대사보다도 우선)
+    const crit = S.hp < S.maxHp * 0.15 && MOMO.ftlCrit.length;
+    say(pickOne_(crit ? MOMO.ftlCrit : MOMO.ftl), crit ? PRIO_DEATH + 1 : 0, () => { M.ftlSys = S.sector; });
+  }
   for (const [ids, lines] of MOMO.combo) { const k = ids.join('+'); if (!M.combo[k] && ids.every(owned)) { say(pickOne_(lines), 0, () => { M.combo[k] = true; }); break; } }
 }
 function momoMoved() {   // 짧은 시간에 연속으로 이동하면 연료 걱정
